@@ -12,6 +12,8 @@
 #include "Components/SphereComponent.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/CompilerResultsLog.h"
+#include "Logging/TokenizedMessage.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "UObject/Field.h"
@@ -20,6 +22,14 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
+#include "EdGraph/EdGraph.h"
+#include "Factories/MaterialFactoryNew.h"
+#include "Factories/MaterialInstanceConstantFactoryNew.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstanceConstant.h"
+#include "Materials/MaterialExpressionConstant3Vector.h"
+#include "MaterialEditingLibrary.h"
+#include "UObject/SavePackage.h"
 
 FUnrealMCPBlueprintCommands::FUnrealMCPBlueprintCommands()
 {
@@ -63,7 +73,19 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleCommand(const FString
     {
         return HandleSetPawnProperties(Params);
     }
-    
+    else if (CommandType == TEXT("add_blueprint_function"))
+    {
+        return HandleAddBlueprintFunction(Params);
+    }
+    else if (CommandType == TEXT("create_material"))
+    {
+        return HandleCreateMaterial(Params);
+    }
+    else if (CommandType == TEXT("create_material_instance"))
+    {
+        return HandleCreateMaterialInstance(Params);
+    }
+
     return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint command: %s"), *CommandType));
 }
 
@@ -153,6 +175,9 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleCreateBlueprint(const
         // Mark the package dirty
         Package->MarkPackageDirty();
 
+        // Save to disk immediately so disk-based tools (spawn_blueprint_actor) can find it
+        UEditorAssetLibrary::SaveLoadedAsset(NewBlueprint, false);
+
         TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
         ResultObj->SetStringField(TEXT("name"), AssetName);
         ResultObj->SetStringField(TEXT("path"), PackagePath + AssetName);
@@ -194,26 +219,26 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleAddComponentToBluepri
     UClass* ComponentClass = nullptr;
 
     // Try to find the class with exact name first
-    ComponentClass = FindObject<UClass>(ANY_PACKAGE, *ComponentType);
+    ComponentClass = FindFirstObject<UClass>(*ComponentType);
     
     // If not found, try with "Component" suffix
     if (!ComponentClass && !ComponentType.EndsWith(TEXT("Component")))
     {
         FString ComponentTypeWithSuffix = ComponentType + TEXT("Component");
-        ComponentClass = FindObject<UClass>(ANY_PACKAGE, *ComponentTypeWithSuffix);
+        ComponentClass = FindFirstObject<UClass>(*ComponentTypeWithSuffix);
     }
     
     // If still not found, try with "U" prefix
     if (!ComponentClass && !ComponentType.StartsWith(TEXT("U")))
     {
         FString ComponentTypeWithPrefix = TEXT("U") + ComponentType;
-        ComponentClass = FindObject<UClass>(ANY_PACKAGE, *ComponentTypeWithPrefix);
+        ComponentClass = FindFirstObject<UClass>(*ComponentTypeWithPrefix);
         
         // Try with both prefix and suffix
         if (!ComponentClass && !ComponentType.EndsWith(TEXT("Component")))
         {
             FString ComponentTypeWithBoth = TEXT("U") + ComponentType + TEXT("Component");
-            ComponentClass = FindObject<UClass>(ANY_PACKAGE, *ComponentTypeWithBoth);
+            ComponentClass = FindFirstObject<UClass>(*ComponentTypeWithBoth);
         }
     }
     
@@ -841,12 +866,54 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleCompileBlueprint(cons
         return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
     }
 
-    // Compile the blueprint
-    FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    // Compile the blueprint and CAPTURE the results log (errors/warnings)
+    FCompilerResultsLog Results;
+    Results.bSilentMode = true;
+    FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &Results);
 
     TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
     ResultObj->SetStringField(TEXT("name"), BlueprintName);
-    ResultObj->SetBoolField(TEXT("compiled"), true);
+    ResultObj->SetNumberField(TEXT("num_errors"), Results.NumErrors);
+    ResultObj->SetNumberField(TEXT("num_warnings"), Results.NumWarnings);
+    // "compiled" is true only when there are no errors
+    ResultObj->SetBoolField(TEXT("compiled"), Results.NumErrors == 0);
+
+    // Blueprint status string
+    FString StatusStr;
+    switch (Blueprint->Status)
+    {
+        case BS_UpToDate:             StatusStr = TEXT("UpToDate"); break;
+        case BS_UpToDateWithWarnings: StatusStr = TEXT("UpToDateWithWarnings"); break;
+        case BS_Dirty:                StatusStr = TEXT("Dirty"); break;
+        case BS_Error:                StatusStr = TEXT("Error"); break;
+        default:                      StatusStr = TEXT("Unknown"); break;
+    }
+    ResultObj->SetStringField(TEXT("status"), StatusStr);
+
+    // Collect each compiler message (so the AI can read and fix actual errors)
+    TArray<TSharedPtr<FJsonValue>> MessagesArray;
+    for (const TSharedRef<FTokenizedMessage>& Message : Results.Messages)
+    {
+        FString Severity = TEXT("Info");
+        if (Message->GetSeverity() == EMessageSeverity::Error)
+        {
+            Severity = TEXT("Error");
+        }
+        else if (Message->GetSeverity() == EMessageSeverity::Warning)
+        {
+            Severity = TEXT("Warning");
+        }
+
+        TSharedPtr<FJsonObject> MsgObj = MakeShared<FJsonObject>();
+        MsgObj->SetStringField(TEXT("severity"), Severity);
+        MsgObj->SetStringField(TEXT("message"), Message->ToText().ToString());
+        MessagesArray.Add(MakeShared<FJsonValueObject>(MsgObj));
+    }
+    ResultObj->SetArrayField(TEXT("messages"), MessagesArray);
+
+    // Persist the compiled blueprint to disk so spawn can load the latest version
+    UEditorAssetLibrary::SaveLoadedAsset(Blueprint, false);
+
     return ResultObj;
 }
 
@@ -1157,4 +1224,186 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleSetPawnProperties(con
     ResponseObj->SetBoolField(TEXT("success"), bAnyPropertiesSet);
     ResponseObj->SetObjectField(TEXT("results"), ResultsObj);
     return ResponseObj;
+}
+
+// ==========================================================================
+//  Added: create a new function graph, and create a Material asset
+// ==========================================================================
+
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleAddBlueprintFunction(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlueprintName;
+    if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+    }
+    FString FunctionName;
+    if (!Params->TryGetStringField(TEXT("function_name"), FunctionName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'function_name' parameter"));
+    }
+
+    UBlueprint* Blueprint = FUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
+    if (!Blueprint)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
+    }
+
+    UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+        Blueprint, FName(*FunctionName), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+    if (!NewGraph)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create function graph"));
+    }
+    FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated*/ true, (UClass*)nullptr);
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("blueprint"), BlueprintName);
+    ResultObj->SetStringField(TEXT("function"), FunctionName);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleCreateMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+    FString MaterialName;
+    if (!Params->TryGetStringField(TEXT("name"), MaterialName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+    FString FolderPath = TEXT("/Game/Materials/");
+    Params->TryGetStringField(TEXT("path"), FolderPath);
+    if (!FolderPath.EndsWith(TEXT("/")))
+    {
+        FolderPath += TEXT("/");
+    }
+    const FString FullPath = FolderPath + MaterialName;
+
+    if (UEditorAssetLibrary::DoesAssetExist(FullPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Material already exists: %s"), *FullPath));
+    }
+
+    UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
+    UPackage* Package = CreatePackage(*FullPath);
+    UMaterial* Material = Cast<UMaterial>(Factory->FactoryCreateNew(
+        UMaterial::StaticClass(), Package, *MaterialName, RF_Standalone | RF_Public, nullptr, GWarn));
+    if (!Material)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create material"));
+    }
+
+    FAssetRegistryModule::AssetCreated(Material);
+    Package->MarkPackageDirty();
+
+    // Optional base color: [R, G, B] in 0..1
+    if (Params->HasField(TEXT("base_color")))
+    {
+        const TArray<TSharedPtr<FJsonValue>>* ColorArr = nullptr;
+        if (Params->TryGetArrayField(TEXT("base_color"), ColorArr) && ColorArr && ColorArr->Num() >= 3)
+        {
+            const float R = (float)(*ColorArr)[0]->AsNumber();
+            const float G = (float)(*ColorArr)[1]->AsNumber();
+            const float B = (float)(*ColorArr)[2]->AsNumber();
+            UMaterialExpressionConstant3Vector* ColorExpr = Cast<UMaterialExpressionConstant3Vector>(
+                UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionConstant3Vector::StaticClass()));
+            if (ColorExpr)
+            {
+                ColorExpr->Constant = FLinearColor(R, G, B);
+                UMaterialEditingLibrary::ConnectMaterialProperty(ColorExpr, TEXT(""), MP_BaseColor);
+                UMaterialEditingLibrary::RecompileMaterial(Material);
+            }
+        }
+    }
+
+    UEditorAssetLibrary::SaveLoadedAsset(Material, false);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("name"), MaterialName);
+    ResultObj->SetStringField(TEXT("path"), FullPath);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleCreateMaterialInstance(const TSharedPtr<FJsonObject>& Params)
+{
+    FString InstanceName;
+    if (!Params->TryGetStringField(TEXT("name"), InstanceName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+    FString ParentPath;
+    if (!Params->TryGetStringField(TEXT("parent_material"), ParentPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'parent_material' parameter"));
+    }
+    FString FolderPath = TEXT("/Game/Materials/");
+    Params->TryGetStringField(TEXT("path"), FolderPath);
+    if (!FolderPath.EndsWith(TEXT("/")))
+    {
+        FolderPath += TEXT("/");
+    }
+    const FString FullPath = FolderPath + InstanceName;
+
+    if (UEditorAssetLibrary::DoesAssetExist(FullPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Asset already exists: %s"), *FullPath));
+    }
+
+    UMaterialInterface* ParentMaterial = Cast<UMaterialInterface>(UEditorAssetLibrary::LoadAsset(ParentPath));
+    if (!ParentMaterial)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Parent material not found: %s"), *ParentPath));
+    }
+
+    UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
+    Factory->InitialParent = ParentMaterial;
+    UPackage* Package = CreatePackage(*FullPath);
+    UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(Factory->FactoryCreateNew(
+        UMaterialInstanceConstant::StaticClass(), Package, *InstanceName, RF_Standalone | RF_Public, nullptr, GWarn));
+    if (!Instance)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create material instance"));
+    }
+
+    FAssetRegistryModule::AssetCreated(Instance);
+    Package->MarkPackageDirty();
+
+    // Optional scalar parameters: {"ParamName": 0.5, ...}
+    const TSharedPtr<FJsonObject>* ScalarParams = nullptr;
+    if (Params->TryGetObjectField(TEXT("scalar_params"), ScalarParams) && ScalarParams)
+    {
+        for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*ScalarParams)->Values)
+        {
+            UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, FName(*Pair.Key), (float)Pair.Value->AsNumber());
+        }
+    }
+    // Optional vector parameters: {"ParamName": [R,G,B,A?], ...}
+    const TSharedPtr<FJsonObject>* VectorParams = nullptr;
+    if (Params->TryGetObjectField(TEXT("vector_params"), VectorParams) && VectorParams)
+    {
+        for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*VectorParams)->Values)
+        {
+            const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+            if (Pair.Value->TryGetArray(Arr) && Arr && Arr->Num() >= 3)
+            {
+                const float R = (float)(*Arr)[0]->AsNumber();
+                const float G = (float)(*Arr)[1]->AsNumber();
+                const float B = (float)(*Arr)[2]->AsNumber();
+                const float A = Arr->Num() >= 4 ? (float)(*Arr)[3]->AsNumber() : 1.0f;
+                UMaterialEditingLibrary::SetMaterialInstanceVectorParameterValue(Instance, FName(*Pair.Key), FLinearColor(R, G, B, A));
+            }
+        }
+    }
+
+    UMaterialEditingLibrary::UpdateMaterialInstance(Instance);
+    UEditorAssetLibrary::SaveLoadedAsset(Instance, false);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("name"), InstanceName);
+    ResultObj->SetStringField(TEXT("path"), FullPath);
+    ResultObj->SetStringField(TEXT("parent"), ParentPath);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    return ResultObj;
 } 

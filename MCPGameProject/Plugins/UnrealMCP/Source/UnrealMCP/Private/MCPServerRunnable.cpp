@@ -11,9 +11,6 @@
 #include "Misc/ScopeLock.h"
 #include "HAL/PlatformTime.h"
 
-// Buffer size for receiving data
-const int32 BufferSize = 8192;
-
 FMCPServerRunnable::FMCPServerRunnable(UUnrealMCPBridge* InBridge, TSharedPtr<FSocket> InListenerSocket)
     : Bridge(InBridge)
     , ListenerSocket(InListenerSocket)
@@ -60,7 +57,9 @@ uint32 FMCPServerRunnable::Run()
                 while (bRunning)
                 {
                     int32 BytesRead = 0;
-                    if (ClientSocket->Recv(Buffer, sizeof(Buffer), BytesRead))
+                    // Reserve 1 byte for the null terminator below — Recv with the
+                    // full size would allow Buffer[8192] = '\0' (out-of-bounds write)
+                    if (ClientSocket->Recv(Buffer, sizeof(Buffer) - 1, BytesRead))
                     {
                         if (BytesRead == 0)
                         {
@@ -203,7 +202,7 @@ void FMCPServerRunnable::HandleClientConnection(TSharedPtr<FSocket> InClientSock
         bool bReadSuccess = false;
         
         UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Attempting to receive data..."));
-        bReadSuccess = InClientSocket->Recv(Buffer, MaxBufferSize, BytesRead, ESocketReceiveFlags::None);
+        bReadSuccess = InClientSocket->Recv(Buffer, MaxBufferSize - 1, BytesRead, ESocketReceiveFlags::None);
         
         UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Recv attempt complete - Success=%s, BytesRead=%d"), 
                bReadSuccess ? TEXT("true") : TEXT("false"), BytesRead);

@@ -41,7 +41,7 @@ def register_umg_tools(mcp: FastMCP):
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
             
             params = {
-                "widget_name": widget_name,
+                "name": widget_name,
                 "parent_class": parent_class,
                 "path": path
             }
@@ -96,8 +96,8 @@ def register_umg_tools(mcp: FastMCP):
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
             
             params = {
-                "widget_name": widget_name,
-                "text_block_name": text_block_name,
+                "blueprint_name": widget_name,
+                "widget_name": text_block_name,
                 "text": text,
                 "position": position,
                 "size": size,
@@ -157,8 +157,8 @@ def register_umg_tools(mcp: FastMCP):
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
             
             params = {
-                "widget_name": widget_name,
-                "button_name": button_name,
+                "blueprint_name": widget_name,
+                "widget_name": button_name,
                 "text": text,
                 "position": position,
                 "size": size,
@@ -215,8 +215,8 @@ def register_umg_tools(mcp: FastMCP):
                 function_name = f"{widget_component_name}_{event_name}"
             
             params = {
-                "widget_name": widget_name,
-                "widget_component_name": widget_component_name,
+                "blueprint_name": widget_name,
+                "widget_name": widget_component_name,
                 "event_name": event_name,
                 "function_name": function_name
             }
@@ -261,7 +261,7 @@ def register_umg_tools(mcp: FastMCP):
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
             
             params = {
-                "widget_name": widget_name,
+                "blueprint_name": widget_name,
                 "z_order": z_order
             }
             
@@ -309,9 +309,9 @@ def register_umg_tools(mcp: FastMCP):
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
             
             params = {
-                "widget_name": widget_name,
-                "text_block_name": text_block_name,
-                "binding_property": binding_property,
+                "blueprint_name": widget_name,
+                "widget_name": text_block_name,
+                "binding_name": binding_property,
                 "binding_type": binding_type
             }
             
@@ -330,4 +330,125 @@ def register_umg_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
-    logger.info("UMG tools registered successfully") 
+    @mcp.tool()
+    def get_widget_info(
+        ctx: Context,
+        widget_name: str
+    ) -> Dict[str, Any]:
+        """
+        Read a Widget Blueprint's widget tree: every widget's name, class,
+        text content (TextBlock/EditableTextBox), and canvas position.
+        Use this to collect/audit UI strings or inspect an existing widget.
+
+        Args:
+            widget_name: Name of the Widget Blueprint (under /Game/Widgets)
+
+        Returns:
+            Dict with 'widgets' array: [{name, class, text?, position?}, ...]
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("get_widget_info", {"blueprint_name": widget_name})
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            error_msg = f"Error getting widget info: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    def _send_umg(command: str, params: dict) -> Dict[str, Any]:
+        """Shared helper for UMG commands."""
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command(command, params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            logger.error(f"Error in {command}: {e}")
+            return {"success": False, "message": str(e)}
+
+    @mcp.tool()
+    def set_widget_text(
+        ctx: Context,
+        widget_name: str,
+        component_name: str,
+        text: str
+    ) -> Dict[str, Any]:
+        """
+        Change the text of an EXISTING TextBlock/EditableTextBox in a Widget Blueprint
+        (e.g. fix a typo found via get_widget_info).
+
+        Args:
+            widget_name: Name of the Widget Blueprint (under /Game/Widgets)
+            component_name: Name of the text widget inside it
+            text: New text content
+        """
+        return _send_umg("set_widget_text", {"blueprint_name": widget_name, "widget_name": component_name, "text": text})
+
+    @mcp.tool()
+    def delete_widget(
+        ctx: Context,
+        widget_name: str,
+        component_name: str
+    ) -> Dict[str, Any]:
+        """
+        Remove a widget (text, button, image...) from a Widget Blueprint.
+
+        Args:
+            widget_name: Name of the Widget Blueprint (under /Game/Widgets)
+            component_name: Name of the widget to remove
+        """
+        return _send_umg("delete_widget", {"blueprint_name": widget_name, "widget_name": component_name})
+
+    @mcp.tool()
+    def add_image_to_widget(
+        ctx: Context,
+        widget_name: str,
+        image_name: str,
+        texture_path: str = "",
+        position = None,
+        size = None
+    ) -> Dict[str, Any]:
+        """
+        Add an Image widget, optionally with a texture (e.g. '/Game/Widgets/Images/A.A').
+        """
+        params = {"blueprint_name": widget_name, "widget_name": image_name}
+        if texture_path:
+            params["texture_path"] = texture_path
+        if position is not None:
+            params["position"] = position
+        if size is not None:
+            params["size"] = size
+        return _send_umg("add_image_to_widget", params)
+
+    @mcp.tool()
+    def add_progress_bar_to_widget(
+        ctx: Context,
+        widget_name: str,
+        bar_name: str,
+        percent: float = 1.0,
+        fill_color = None,
+        position = None,
+        size = None
+    ) -> Dict[str, Any]:
+        """
+        Add a ProgressBar (health bar etc.). percent is 0.0~1.0; fill_color is [R,G,B,A?].
+        """
+        params = {"blueprint_name": widget_name, "widget_name": bar_name, "percent": percent}
+        if fill_color is not None:
+            params["fill_color"] = fill_color
+        if position is not None:
+            params["position"] = position
+        if size is not None:
+            params["size"] = size
+        return _send_umg("add_progress_bar_to_widget", params)
+
+    logger.info("UMG tools registered successfully")

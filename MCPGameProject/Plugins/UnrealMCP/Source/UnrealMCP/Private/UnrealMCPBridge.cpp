@@ -233,8 +233,20 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("get_actor_properties") ||
                      CommandType == TEXT("set_actor_property") ||
                      CommandType == TEXT("spawn_blueprint_actor") ||
-                     CommandType == TEXT("focus_viewport") || 
-                     CommandType == TEXT("take_screenshot"))
+                     CommandType == TEXT("focus_viewport") ||
+                     CommandType == TEXT("take_screenshot") ||
+                     CommandType == TEXT("get_output_log") ||
+                     CommandType == TEXT("set_actor_mesh") ||
+                     CommandType == TEXT("set_actor_material") ||
+                     CommandType == TEXT("list_assets") ||
+                     CommandType == TEXT("save_all") ||
+                     CommandType == TEXT("start_pie") ||
+                     CommandType == TEXT("stop_pie") ||
+                     CommandType == TEXT("execute_python") ||
+                     CommandType == TEXT("exec_console_command") ||
+                     CommandType == TEXT("duplicate_actor") ||
+                     CommandType == TEXT("open_asset_editor") ||
+                     CommandType == TEXT("import_asset"))
             {
                 ResultJson = EditorCommands->HandleCommand(CommandType, Params);
             }
@@ -246,7 +258,10 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("compile_blueprint") || 
                      CommandType == TEXT("set_blueprint_property") || 
                      CommandType == TEXT("set_static_mesh_properties") ||
-                     CommandType == TEXT("set_pawn_properties"))
+                     CommandType == TEXT("set_pawn_properties") ||
+                     CommandType == TEXT("add_blueprint_function") ||
+                     CommandType == TEXT("create_material") ||
+                     CommandType == TEXT("create_material_instance"))
             {
                 ResultJson = BlueprintCommands->HandleCommand(CommandType, Params);
             }
@@ -259,7 +274,17 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("add_blueprint_input_action_node") ||
                      CommandType == TEXT("add_blueprint_function_node") ||
                      CommandType == TEXT("add_blueprint_get_component_node") ||
-                     CommandType == TEXT("add_blueprint_variable"))
+                     CommandType == TEXT("add_blueprint_variable") ||
+                     CommandType == TEXT("add_blueprint_variable_get_node") ||
+                     CommandType == TEXT("add_blueprint_variable_set_node") ||
+                     CommandType == TEXT("add_blueprint_branch_node") ||
+                     CommandType == TEXT("get_blueprint_info") ||
+                     CommandType == TEXT("add_blueprint_sequence_node") ||
+                     CommandType == TEXT("add_blueprint_cast_node") ||
+                     CommandType == TEXT("set_node_position") ||
+                     CommandType == TEXT("delete_node") ||
+                     CommandType == TEXT("disconnect_blueprint_nodes") ||
+                     CommandType == TEXT("delete_variable"))
             {
                 ResultJson = BlueprintNodeCommands->HandleCommand(CommandType, Params);
             }
@@ -274,7 +299,12 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("add_button_to_widget") ||
                      CommandType == TEXT("bind_widget_event") ||
                      CommandType == TEXT("set_text_block_binding") ||
-                     CommandType == TEXT("add_widget_to_viewport"))
+                     CommandType == TEXT("add_widget_to_viewport") ||
+                     CommandType == TEXT("get_widget_info") ||
+                     CommandType == TEXT("set_widget_text") ||
+                     CommandType == TEXT("delete_widget") ||
+                     CommandType == TEXT("add_image_to_widget") ||
+                     CommandType == TEXT("add_progress_bar_to_widget"))
             {
                 ResultJson = UMGCommands->HandleCommand(CommandType, Params);
             }

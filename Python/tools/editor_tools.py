@@ -52,6 +52,193 @@ def register_editor_tools(mcp: FastMCP):
             return []
 
     @mcp.tool()
+    def get_output_log(ctx: Context, max_lines: int = 100, filter: str = "") -> Dict[str, Any]:
+        """
+        Read recent lines from the Unreal Editor output log (errors, warnings, Print String).
+        Use this to debug — e.g. after start/stop play or a compile, read what the engine reported.
+
+        Args:
+            max_lines: How many of the most recent lines to return (default 100)
+            filter: Optional substring filter (e.g. 'Error', 'LogBlueprint', 'MyDebug')
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            params = {"max_lines": max_lines, "filter": filter}
+            response = unreal.send_command("get_output_log", params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            logger.error(f"Error getting output log: {e}")
+            return {"success": False, "message": str(e)}
+
+    @mcp.tool()
+    def set_actor_mesh(ctx: Context, name: str, mesh_path: str) -> Dict[str, Any]:
+        """
+        Assign a static mesh to a level actor's StaticMeshComponent (makes empty StaticMeshActors visible).
+
+        Args:
+            name: Name of the actor in the level
+            mesh_path: Asset path, e.g. '/Engine/BasicShapes/Cube.Cube'
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("set_actor_mesh", {"name": name, "mesh_path": mesh_path})
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            logger.error(f"Error setting actor mesh: {e}")
+            return {"success": False, "message": str(e)}
+
+    @mcp.tool()
+    def set_actor_material(ctx: Context, name: str, material_path: str, slot: int = 0) -> Dict[str, Any]:
+        """
+        Assign a material to a level actor's mesh component.
+
+        Args:
+            name: Name of the actor in the level
+            material_path: Asset path, e.g. '/Game/Materials/M_Red.M_Red'
+            slot: Material slot index (default 0)
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("set_actor_material", {"name": name, "material_path": material_path, "slot": slot})
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            logger.error(f"Error setting actor material: {e}")
+            return {"success": False, "message": str(e)}
+
+    @mcp.tool()
+    def list_assets(ctx: Context, path: str = "/Game", class_name: str = "", limit: int = 100) -> Dict[str, Any]:
+        """
+        List/search assets in the content browser via the Asset Registry.
+
+        Args:
+            path: Content path to search under (default '/Game', recursive)
+            class_name: Optional asset class filter (e.g. 'StaticMesh', 'Material', 'Blueprint')
+            limit: Max number of assets to return (default 100)
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("list_assets", {"path": path, "class_name": class_name, "limit": limit})
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            logger.error(f"Error listing assets: {e}")
+            return {"success": False, "message": str(e)}
+
+    @mcp.tool()
+    def save_all(ctx: Context) -> Dict[str, Any]:
+        """Save all dirty (unsaved) packages — level and content assets."""
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("save_all", {})
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            logger.error(f"Error saving: {e}")
+            return {"success": False, "message": str(e)}
+
+    def _send(command: str, params: dict) -> Dict[str, Any]:
+        """Shared helper: send a command to Unreal and normalize errors."""
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command(command, params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            logger.error(f"Error in {command}: {e}")
+            return {"success": False, "message": str(e)}
+
+    @mcp.tool()
+    def start_pie(ctx: Context) -> Dict[str, Any]:
+        """Start Play-In-Editor (PIE). After starting, poll actors (get_actor_properties)
+        or read get_output_log to observe runtime behavior. Stop with stop_pie."""
+        return _send("start_pie", {})
+
+    @mcp.tool()
+    def stop_pie(ctx: Context) -> Dict[str, Any]:
+        """Stop the running Play-In-Editor (PIE) session."""
+        return _send("stop_pie", {})
+
+    @mcp.tool()
+    def execute_python(ctx: Context, script: str) -> Dict[str, Any]:
+        """
+        Execute a Python script inside the Unreal Editor (the `unreal` module is available).
+        The universal escape hatch: anything the editor's Python API can do, this can do.
+
+        Args:
+            script: Python source code (multi-line OK). Keep under ~7KB.
+                    Use print() / unreal.log() — output is returned in 'output'.
+        """
+        return _send("execute_python", {"script": script})
+
+    @mcp.tool()
+    def exec_console_command(ctx: Context, command: str) -> Dict[str, Any]:
+        """
+        Run an Unreal console command (e.g. 'stat fps', 'r.ScreenPercentage 50', 'show collision').
+        Command output (if any) goes to the engine log — read it with get_output_log.
+        """
+        return _send("exec_console_command", {"command": command})
+
+    @mcp.tool()
+    def duplicate_actor(ctx: Context, name: str, offset = None) -> Dict[str, Any]:
+        """
+        Duplicate a level actor.
+
+        Args:
+            name: Name of the actor to duplicate
+            offset: Optional [X, Y, Z] world offset for the copy (default [100, 100, 0])
+        """
+        params = {"name": name}
+        if offset is not None:
+            params["offset"] = offset
+        return _send("duplicate_actor", params)
+
+    @mcp.tool()
+    def open_asset_editor(ctx: Context, asset_path: str) -> Dict[str, Any]:
+        """
+        Open an asset in its editor window on the user's screen (e.g. show them a
+        Blueprint you just made). asset_path e.g. '/Game/Blueprints/BP_MovingCube'.
+        """
+        return _send("open_asset_editor", {"asset_path": asset_path})
+
+    @mcp.tool()
+    def import_asset(ctx: Context, source_file: str, destination_path: str = "/Game/Imported") -> Dict[str, Any]:
+        """
+        Import an external file (FBX, PNG, WAV...) as a content asset.
+
+        Args:
+            source_file: Absolute path on disk, e.g. 'C:/assets/rock.fbx'
+            destination_path: Content folder to import into (default '/Game/Imported')
+        """
+        return _send("import_asset", {"source_file": source_file, "destination_path": destination_path})
+
+    @mcp.tool()
     def find_actors_by_name(ctx: Context, pattern: str) -> List[str]:
         """Find actors by name pattern."""
         from unreal_mcp_server import get_unreal_connection

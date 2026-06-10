@@ -8,6 +8,7 @@ import logging
 import socket
 import sys
 import json
+import threading
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
@@ -34,6 +35,9 @@ class UnrealConnection:
         """Initialize the connection."""
         self.socket = None
         self.connected = False
+        # FastMCP runs sync tools in worker threads, so parallel tool calls
+        # share this object concurrently — serialize all socket use.
+        self._lock = threading.Lock()
     
     def connect(self) -> bool:
         """Connect to the Unreal Engine instance."""
@@ -48,7 +52,7 @@ class UnrealConnection:
             
             logger.info(f"Connecting to Unreal at {UNREAL_HOST}:{UNREAL_PORT}...")
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(5)  # 5 second timeout
+            self.socket.settimeout(30)  # 30s: heavy ops (blueprint spawn, mesh/material compile) need more than 5s
             
             # Set socket options for better stability
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -81,7 +85,7 @@ class UnrealConnection:
     def receive_full_response(self, sock, buffer_size=4096) -> bytes:
         """Receive a complete response from Unreal, handling chunked data."""
         chunks = []
-        sock.settimeout(5)  # 5 second timeout
+        sock.settimeout(30)  # 30s: heavy ops (blueprint spawn, mesh/material compile) need more than 5s
         try:
             while True:
                 chunk = sock.recv(buffer_size)
@@ -124,7 +128,11 @@ class UnrealConnection:
             raise
     
     def send_command(self, command: str, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
-        """Send a command to Unreal Engine and get the response."""
+        """Send a command to Unreal Engine and get the response (thread-safe)."""
+        with self._lock:
+            return self._send_command_impl(command, params)
+
+    def _send_command_impl(self, command: str, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         # Always reconnect for each command, since Unreal closes the connection after each command
         # This is different from Unity which keeps connections alive
         if self.socket:

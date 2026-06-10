@@ -4,13 +4,35 @@
 <span style="color: #555555">unreal-mcp</span>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.5%2B-orange)](https://www.unrealengine.com)
-[![Python](https://img.shields.io/badge/Python-3.12%2B-yellow)](https://www.python.org)
+[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.7-orange)](https://www.unrealengine.com)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-yellow)](https://www.python.org)
 [![Status](https://img.shields.io/badge/Status-Experimental-red)](https://github.com/chongdashu/unreal-mcp)
 
 </div>
 
 This project enables AI assistant clients like Cursor, Windsurf and Claude Desktop to control Unreal Engine through natural language using the Model Context Protocol (MCP).
+
+## 🔱 About This Fork
+
+This is an extended fork of [chongdashu/unreal-mcp](https://github.com/chongdashu/unreal-mcp) (MIT), ported to **Unreal Engine 5.7** with major bug fixes and roughly **2x the toolset**. Key changes:
+
+**Fixes over upstream**
+- `spawn_blueprint_actor` actually works (name-collision hang fixed) and created blueprints are **auto-saved to disk**
+- `compile_blueprint` returns real **compile errors/warnings/messages** (upstream always returned `compiled: true`)
+- UMG tools fixed: Python↔C++ parameter mismatches, widget blueprints created through the proper `UWidgetBlueprintFactory`
+- UE 5.6+ compatibility: `ANY_PACKAGE` removal, strict-build shadowing errors, deprecated PNG compression API
+- Thread-safe Python connection (parallel MCP tool calls no longer drop responses), 30s socket timeout, buffer overflow fixes
+
+**New tools (highlights)**
+- **`execute_python`** — run editor Python (the universal escape hatch), `exec_console_command`
+- **`start_pie` / `stop_pie`** — Play-In-Editor control for AI self-testing loops
+- Blueprint graph editing: **Branch**, variable Get/Set, Sequence, Cast, delete node/variable, disconnect pins, `set_node_position`, function graphs
+- Introspection: `get_blueprint_info` (variables w/ defaults, components, nodes w/ pin literals), `get_widget_info` (widget tree + texts), `get_output_log`
+- Assets & materials: `list_assets`, `import_asset`, `create_material`, `create_material_instance` (w/ parameter overrides), `set_actor_mesh/material`
+- UMG: `set_widget_text`, `delete_widget`, Image, ProgressBar
+- Editor QoL: `duplicate_actor`, `open_asset_editor`, `save_all`, screenshot fix
+
+See the upstream repository for the original work and concept.
 
 ## ⚠️ Experimental Status
 

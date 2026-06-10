@@ -46,7 +46,108 @@ def register_blueprint_tools(mcp: FastMCP):
             error_msg = f"Error creating blueprint: {e}"
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
-    
+
+    @mcp.tool()
+    def add_blueprint_function(
+        ctx: Context,
+        blueprint_name: str,
+        function_name: str
+    ) -> Dict[str, Any]:
+        """
+        Create a new (empty) function graph in a Blueprint.
+
+        Args:
+            blueprint_name: Name of the target Blueprint
+            function_name: Name for the new function
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("add_blueprint_function", {
+                "blueprint_name": blueprint_name,
+                "function_name": function_name
+            })
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            error_msg = f"Error adding blueprint function: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def create_material(
+        ctx: Context,
+        name: str,
+        path: str = "/Game/Materials/",
+        base_color = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new Material asset, optionally with a base color.
+
+        Args:
+            name: Name of the material asset
+            path: Content folder to create it in (default '/Game/Materials/')
+            base_color: Optional [R, G, B] floats in 0..1 for the base color
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            params = {"name": name, "path": path}
+            if base_color is not None:
+                params["base_color"] = base_color
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("create_material", params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            error_msg = f"Error creating material: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def create_material_instance(
+        ctx: Context,
+        name: str,
+        parent_material: str,
+        path: str = "/Game/Materials/",
+        scalar_params: Dict[str, Any] = None,
+        vector_params: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a Material Instance from a parent material and set parameter overrides.
+        Practical way to mass-produce color/value variants without new materials.
+
+        Args:
+            name: Name for the new instance asset
+            parent_material: Path to parent (e.g. '/Game/Materials/M_Base.M_Base')
+            path: Content folder (default '/Game/Materials/')
+            scalar_params: Optional {"ParamName": 0.5, ...}
+            vector_params: Optional {"ParamName": [R, G, B, A?], ...}
+        """
+        from unreal_mcp_server import get_unreal_connection
+        try:
+            params = {"name": name, "parent_material": parent_material, "path": path}
+            if scalar_params:
+                params["scalar_params"] = scalar_params
+            if vector_params:
+                params["vector_params"] = vector_params
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            response = unreal.send_command("create_material_instance", params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            error_msg = f"Error creating material instance: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     @mcp.tool()
     def add_component_to_blueprint(
         ctx: Context,

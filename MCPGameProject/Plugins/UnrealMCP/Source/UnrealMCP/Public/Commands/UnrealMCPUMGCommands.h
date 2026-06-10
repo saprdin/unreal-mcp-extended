@@ -79,4 +79,18 @@ private:
      * @return JSON response with the binding details
      */
     TSharedPtr<FJsonObject> HandleSetTextBlockBinding(const TSharedPtr<FJsonObject>& Params);
+
+    /**
+     * Read a Widget Blueprint's widget tree: every widget's name, class,
+     * text content (TextBlock/EditableTextBox), and canvas position.
+     * @param Params - Must include "blueprint_name"
+     * @return JSON response with a "widgets" array
+     */
+    TSharedPtr<FJsonObject> HandleGetWidgetInfo(const TSharedPtr<FJsonObject>& Params);
+
+    // Added: widget editing completeness
+    TSharedPtr<FJsonObject> HandleSetWidgetText(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleDeleteWidget(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddImageToWidget(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddProgressBarToWidget(const TSharedPtr<FJsonObject>& Params);
 }; 
