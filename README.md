@@ -54,12 +54,14 @@ The Unreal MCP integration provides comprehensive tools for controlling Unreal E
 
 | Category | Capabilities |
 |----------|-------------|
-| **Actor Management** | • Create and delete actors (cubes, spheres, lights, cameras, etc.)<br>• Set actor transforms (position, rotation, scale)<br>• Query actor properties and find actors by name<br>• List all actors in the current level |
-| **Blueprint Development** | • Create new Blueprint classes with custom components<br>• Add and configure components (mesh, camera, light, etc.)<br>• Set component properties and physics settings<br>• Compile Blueprints and spawn Blueprint actors<br>• Create input mappings for player controls |
-| **Blueprint Node Graph** | • Add event nodes (BeginPlay, Tick, etc.)<br>• Create function call nodes and connect them<br>• Add variables with custom types and default values<br>• Create component and self references<br>• Find and manage nodes in the graph |
-| **Editor Control** | • Focus viewport on specific actors or locations<br>• Control viewport camera orientation and distance |
+| **Actor Management** | • Spawn, delete, and duplicate actors (meshes, lights, cameras, etc.)<br>• Set actor transforms, meshes, materials, and arbitrary properties<br>• Query actor properties and find actors by name<br>• List all actors in the current level |
+| **Blueprint Development** | • Create new Blueprint classes with custom components<br>• Add and configure components (mesh, camera, light, etc.)<br>• Set component properties and physics settings<br>• Create function graphs, materials, and material instances<br>• Compile Blueprints (with real error reporting) and spawn Blueprint actors |
+| **Blueprint Node Graph** | • Add event, function, Branch, Sequence, and Cast nodes<br>• Add variables and Get/Set variable nodes<br>• Connect/disconnect pins, move and delete nodes<br>• Inspect Blueprints with `get_blueprint_info` |
+| **UMG / UI** | • Create Widget Blueprints with text, buttons, images, progress bars<br>• Bind widget events and text bindings, edit existing widgets<br>• Add widgets to the viewport |
+| **Editor Control & Debugging** | • Start/stop Play-In-Editor for self-testing loops<br>• Read the output log, run console commands, execute editor Python<br>• List/import assets, open asset editors, save all |
+| **Project** | • Create input mappings for player controls |
 
-All these capabilities are accessible through natural language commands via AI assistants, making it easy to automate and control Unreal Engine workflows.
+All these capabilities are accessible through natural language commands via AI assistants, making it easy to automate and control Unreal Engine workflows. See [Docs/Tools](Docs/Tools/README.md) for the full per-tool reference.
 
 ## 🧩 Components
 
