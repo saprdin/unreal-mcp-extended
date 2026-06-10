@@ -7,6 +7,7 @@
 [![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.7-orange)](https://www.unrealengine.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-yellow)](https://www.python.org)
 [![Status](https://img.shields.io/badge/Status-Experimental-red)](https://github.com/chongdashu/unreal-mcp)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20this%20fork-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/akarolls)
 
 </div>
 
@@ -33,6 +34,10 @@ This is an extended fork of [chongdashu/unreal-mcp](https://github.com/chongdash
 - Editor QoL: `duplicate_actor`, `open_asset_editor`, `save_all`, screenshot fix
 
 See the upstream repository for the original work and concept.
+
+### ☕ Support
+
+If this fork saves you time, you can support development here: **[ko-fi.com/akarolls](https://ko-fi.com/akarolls)**
 
 ## ⚠️ Experimental Status
 
