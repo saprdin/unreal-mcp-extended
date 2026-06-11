@@ -1,5 +1,17 @@
 # Refactoring Plan for UnrealMCPBridge
 
+> **✅ Status: COMPLETED**
+>
+> This refactoring has been implemented. `UnrealMCPBridge` now delegates to command
+> handlers under `Source/UnrealMCP/Public|Private/Commands/`. Differences from the
+> plan below:
+> - There is no separate `UnrealMCPActorCommands` — actor commands were folded into
+>   `FUnrealMCPEditorCommands` (matching the layout of `Python/tools/editor_tools.py`).
+> - `FUnrealMCPProjectCommands` and `FUnrealMCPUMGCommands` were added beyond the
+>   original plan.
+>
+> This document is kept for historical reference only.
+
 ## Overview
 The UnrealMCPBridge class has grown too large (4000+ lines) and needs to be refactored into smaller, more manageable components. This document outlines the plan to split it into separate command handlers and a utility class.
 
